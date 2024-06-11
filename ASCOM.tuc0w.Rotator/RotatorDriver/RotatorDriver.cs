@@ -14,6 +14,7 @@ using ASCOM.LocalServer;
 using ASCOM.Utilities;
 using System;
 using System.Collections;
+using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
@@ -623,7 +624,7 @@ namespace ASCOM.RT100.Rotator
                 {
                     CheckConnected("Position");
                     float position = RotatorHardware.Position;
-                    LogMessage("Position", position.ToString());
+                    LogMessage("Position", position.ToString(CultureInfo.InvariantCulture));
                     return position;
                 }
                 catch (Exception ex)

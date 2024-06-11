@@ -53,6 +53,7 @@ namespace ASCOM.RT100.Rotator
         private static ASCOM.Utilities.Serial _serial;
         internal const string TERMINATION_CHAR = ";";
         internal const string NEW_LINE = "\n";
+        private static object _lock = new object();
 
         /// <summary>
         /// Initializes a new instance of the device Hardware class.
@@ -442,6 +443,7 @@ namespace ASCOM.RT100.Rotator
             string response = SerialReceive();
             response = response.Replace("FH:", "");
             response = response.Replace(TERMINATION_CHAR, "");
+            response = response.Trim();
             
             LogMessage("Halt", response);
         }
@@ -458,6 +460,7 @@ namespace ASCOM.RT100.Rotator
                 string response = SerialReceive();
                 response = response.Replace("FR:", "");
                 response = response.Replace(TERMINATION_CHAR, "");
+                response = response.Trim();
                 LogMessage("IsMoving Get", response); // This rotator has instantaneous movement
 
                 return response == "1";
@@ -470,7 +473,7 @@ namespace ASCOM.RT100.Rotator
         /// <param name="Position">Relative position to move in degrees from current <see cref="Position" />.</param>
         internal static void Move(float Position)
         {
-            LogMessage("Move", Position.ToString()); // Move by this amount
+            LogMessage("Move", Position.ToString(CultureInfo.InvariantCulture)); // Move by this amount
             rotatorPosition += Position;
             rotatorPosition = (float)astroUtilities.Range(rotatorPosition, 0.0, true, 360.0, false); // Ensure value is in the range 0.0..359.9999...
 
@@ -485,7 +488,7 @@ namespace ASCOM.RT100.Rotator
         /// <param name="Position">Absolute position in degrees.</param>
         internal static void MoveAbsolute(float Position)
         {
-            LogMessage("MoveAbsolute", Position.ToString()); // Move to this position
+            LogMessage("MoveAbsolute", Position.ToString(CultureInfo.InvariantCulture)); // Move to this position
             rotatorPosition = Position;
             rotatorPosition = (float)astroUtilities.Range(rotatorPosition, 0.0, true, 360.0, false); // Ensure value is in the range 0.0..359.9999...
 
@@ -501,16 +504,16 @@ namespace ASCOM.RT100.Rotator
             get
             {
                 string response = string.Empty;
-                float rotatorPosition = 0.0f;
+                float localPosition = 0.0f;
 
                 SerialTransmit("FD");
                 response = SerialReceive();
                 response = response.Replace("FD:", "");
                 response = response.Replace(TERMINATION_CHAR, "");
                 response = response.Trim();
-                rotatorPosition = (float)Convert.ToDouble(response);
+                localPosition = (float)double.Parse(response, CultureInfo.InvariantCulture);
 
-                return rotatorPosition;
+                return localPosition;
             }
         }
 
@@ -525,6 +528,7 @@ namespace ASCOM.RT100.Rotator
                 string response = SerialReceive();
                 response = response.Replace("FN:", "");
                 response = response.Replace(TERMINATION_CHAR, "");
+                response = response.Trim();
                 bool reverse = response == "1";
 
                 LogMessage("Reverse Get", reverse.ToString());
@@ -544,8 +548,16 @@ namespace ASCOM.RT100.Rotator
         {
             get
             {
-                LogMessage("StepSize Get", "Not implemented");
-                throw new PropertyNotImplementedException("StepSize", false);
+                SerialTransmit("FS"); // Get steps per degree
+                string response = SerialReceive();
+                response = response.Replace("FS:", "");
+                response = response.Replace(TERMINATION_CHAR, "");
+                response = response.Trim();
+                float stepsPerDegree = (float)double.Parse(response, CultureInfo.InvariantCulture);
+                float stepSize = 1.0f / stepsPerDegree;
+
+                LogMessage("StepSize", stepSize.ToString(CultureInfo.InvariantCulture));
+                return stepSize;
             }
         }
 
@@ -581,7 +593,7 @@ namespace ASCOM.RT100.Rotator
         /// <param name="Position">Mechanical rotator position angle.</param>
         internal static void MoveMechanical(float Position)
         {
-            LogMessage("MoveMechanical", Position.ToString()); // Move to this position
+            LogMessage("MoveMechanical", Position.ToString(CultureInfo.InvariantCulture)); // Move to this position
 
             mechanicalPosition = (float)astroUtilities.Range(Position, 0.0, true, 360.0, false); // Ensure value is in the range 0.0..359.9999...
             rotatorPosition = (float)astroUtilities.Range(Position, 0.0, true, 360.0, false); // Ensure value is in the range 0.0..359.9999...
@@ -596,7 +608,7 @@ namespace ASCOM.RT100.Rotator
         /// <param name="Position">Synchronised rotator position angle.</param>
         internal static void Sync(float Position)
         {
-            LogMessage("Sync", Position.ToString()); // Sync to this position
+            LogMessage("Sync", Position.ToString(CultureInfo.InvariantCulture)); // Sync to this position
 
             rotatorPosition = (float)astroUtilities.Range(Position, 0.0, true, 360.0, false); // Ensure value is in the range 0.0..359.9999...
 
@@ -635,12 +647,18 @@ namespace ASCOM.RT100.Rotator
 
         private static void SerialTransmit(string command)
         {
-            _serial.Transmit(command + NEW_LINE);
+            lock (_lock)
+            {
+                _serial.Transmit(command + NEW_LINE);
+            }
         }
 
         private static string SerialReceive()
         {
-            return _serial.ReceiveTerminated(TERMINATION_CHAR);
+            lock (_lock)
+            {
+                return _serial.ReceiveTerminated(TERMINATION_CHAR);
+            }
         }
 
         /// <summary>
